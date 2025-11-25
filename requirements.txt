@@ -1,0 +1,5 @@
+ultralytics==8.2.41
+numpy>=1.23,<2
+opencv-python
+matplotlib
+scikit-image
