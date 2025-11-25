@@ -110,7 +110,7 @@ def main():
             # Affichage live
             cv2.imshow("Enregistrement", frame)
             if cv2.waitKey(1) & 0xFF == ord("q"):
-                print("\n⏹️  Interrompu par l'utilisateur.")
+                print("Interrompu par l'utilisateur.")
                 break
 
             # Fin si durée atteinte
