@@ -1,62 +1,8 @@
 import cv2
 import os
 import time
-import argparse
 from datetime import datetime
-
-
-def parse_args():
-    p = argparse.ArgumentParser(
-        description="Enregistrer une vidéo et prendre des photos périodiques avec la webcam"
-    )
-    p.add_argument(
-        "--duration",
-        "-d",
-        type=float,
-        default=30.0,
-        help="Durée de la vidéo en secondes (défaut: 30)",
-    )
-    p.add_argument(
-        "--photo-interval",
-        "-i",
-        type=float,
-        default=5.0,
-        help="Intervalle en secondes entre chaque photo (défaut: 5)",
-    )
-    p.add_argument(
-        "--video-out",
-        type=str,
-        default=None,
-        help="Nom du fichier vidéo de sortie (dans dossier video/). Par défaut horodaté.",
-    )
-    p.add_argument(
-        "--photos-dir",
-        type=str,
-        default="MEDIA/IMG",
-        help="Dossier pour sauvegarder les photos (défaut: MEDIA/IMG)",
-    )
-    p.add_argument(
-        "--camera", type=int, default=0, help="Index de la caméra (défaut: 0)"
-    )
-    p.add_argument(
-        "--fps",
-        type=float,
-        default=30.0,
-        help="FPS pour l'enregistrement vidéo (essayer 20-30)",
-    )
-    p.add_argument(
-        "--codec",
-        type=str,
-        default="XVID",
-        help="Codec fourcc pour la vidéo (ex: XVID, MJPG)",
-    )
-    p.add_argument(
-        "--backend",
-        type=str,
-        default="auto",
-        help="Backend OpenCV à utiliser (auto, dshow, msmf, vfw, ffmpeg)",
-    )
-    return p.parse_args()
+from interface_user import get_capture_config, confirm_config
 
 
 def open_camera(index, backend):
@@ -83,17 +29,23 @@ def open_camera(index, backend):
 
 
 def main():
-    args = parse_args()
+    # Récupération de la configuration via prompts
+    config = get_capture_config()
+
+    # Demande de confirmation
+    if not confirm_config(config):
+        print("❌ Enregistrement annulé.")
+        return
 
     video_dir = os.path.join("Media", "VID")
-    photos_dir = args.photos_dir
+    photos_dir = config["photos_dir"]
     os.makedirs(video_dir, exist_ok=True)
     os.makedirs(photos_dir, exist_ok=True)
 
-    cap = open_camera(args.camera, args.backend)
+    cap = open_camera(config["camera"], config["backend"])
     if not cap.isOpened():
         print(
-            f"Erreur: impossible d'ouvrir la caméra {args.camera} (backend={args.backend})."
+            f"Erreur: impossible d'ouvrir la caméra {config['camera']} (backend={config['backend']})."
         )
         return
 
@@ -101,31 +53,35 @@ def main():
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 640
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 480
 
-    # FPS: préférer la valeur fournie, mais tenter de lire la valeur de la caméra
+    # FPS
     cam_fps = cap.get(cv2.CAP_PROP_FPS)
-    fps = args.fps if args.fps and args.fps > 0 else (cam_fps if cam_fps > 0 else 20.0)
+    fps = (
+        config["fps"]
+        if config["fps"] and config["fps"] > 0
+        else (cam_fps if cam_fps > 0 else 20.0)
+    )
 
-    if args.video_out:
-        video_path = os.path.join(video_dir, args.video_out)
+    if config["video_out"]:
+        video_path = os.path.join(video_dir, config["video_out"])
     else:
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         video_path = os.path.join(video_dir, f"capture_{ts}.avi")
 
-    fourcc = cv2.VideoWriter_fourcc(*args.codec)
+    fourcc = cv2.VideoWriter_fourcc(*config["codec"])
     writer = cv2.VideoWriter(video_path, fourcc, fps, (width, height))
     if not writer.isOpened():
         print(
             "Avertissement: VideoWriter n'a pas pu s'ouvrir. Vérifiez le codec ou les permissions."
         )
 
-    print(
-        f"Enregistrement vidéo: {video_path} durée={args.duration}s fps={fps} taille=({width}x{height})"
-    )
-    print(f"Sauvegarde photos toutes les {args.photo_interval}s dans {photos_dir}")
-    print("Appuyez sur 'q' pour interrompre prématurément.")
+    print(f"\n🎬 Démarrage de l'enregistrement...")
+    print(f"📹 Vidéo: {video_path}")
+    print(f"📸 Photos: toutes les {config['photo_interval']}s dans {photos_dir}")
+    print(f"⏱️  Durée: {config['duration']}s | FPS: {fps} | Taille: {width}x{height}")
+    print("❗ Appuyez sur 'q' pour interrompre\n")
 
     start = time.time()
-    last_photo = start - args.photo_interval
+    last_photo = start - config["photo_interval"]
     saved_photos = 0
 
     try:
@@ -142,7 +98,7 @@ def main():
                 writer.write(frame)
 
             # Sauvegarder une photo si l'intervalle est atteint
-            if now - last_photo >= args.photo_interval:
+            if now - last_photo >= config["photo_interval"]:
                 tsf = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
                 photo_name = f"photo_{tsf}.jpg"
                 photo_path = os.path.join(photos_dir, photo_name)
@@ -154,12 +110,14 @@ def main():
             # Affichage live
             cv2.imshow("Enregistrement", frame)
             if cv2.waitKey(1) & 0xFF == ord("q"):
-                print("Interrompu par l'utilisateur.")
+                print("\n⏹️  Interrompu par l'utilisateur.")
                 break
 
             # Fin si durée atteinte
-            if now - start >= args.duration:
-                print(f"Durée atteinte ({args.duration}s). Fin de l'enregistrement.")
+            if now - start >= config["duration"]:
+                print(
+                    f"\n⏱️  Durée atteinte ({config['duration']}s). Fin de l'enregistrement."
+                )
                 break
 
     finally:
@@ -167,7 +125,9 @@ def main():
         if writer.isOpened():
             writer.release()
         cv2.destroyAllWindows()
-        print(f"Terminé. Vidéo: {video_path} — Photos sauvegardées: {saved_photos}")
+        print(f"\n✅ Terminé!")
+        print(f"📹 Vidéo: {video_path}")
+        print(f"📸 Photos sauvegardées: {saved_photos}")
 
 
 if __name__ == "__main__":

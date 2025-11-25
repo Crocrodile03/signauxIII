@@ -6,4 +6,4 @@ pour la gestion de fichier lourd, il faut télécharger git Large File Storage (
 git lfs install
 ```
 
-Dans le `.itattributes`, il faut ajouter les types de fichiers à gérer avec `git lfs`
+Dans le `.gitattributes`, il faut ajouter les types de fichiers à gérer avec `git lfs`
