@@ -13,8 +13,8 @@ def parse_args():
                    help="Intervalle en secondes entre chaque photo (défaut: 5)")
     p.add_argument("--video-out", type=str, default=None,
                    help="Nom du fichier vidéo de sortie (dans dossier video/). Par défaut horodaté.")
-    p.add_argument("--photos-dir", type=str, default="photos",
-                   help="Dossier pour sauvegarder les photos (défaut: photos/)")
+    p.add_argument("--photos-dir", type=str, default="MEDIA/IMG",
+                   help="Dossier pour sauvegarder les photos (défaut: MEDIA/IMG)")
     p.add_argument("--camera", type=int, default=0, help="Index de la caméra (défaut: 0)")
     p.add_argument("--fps", type=float, default=30.0, help="FPS pour l'enregistrement vidéo (essayer 20-30)")
     p.add_argument("--codec", type=str, default="XVID", help="Codec fourcc pour la vidéo (ex: XVID, MJPG)")
@@ -48,7 +48,7 @@ def open_camera(index, backend):
 def main():
     args = parse_args()
 
-    video_dir = 'video'
+    video_dir = os.path.join('Media', 'VID')
     photos_dir = args.photos_dir
     os.makedirs(video_dir, exist_ok=True)
     os.makedirs(photos_dir, exist_ok=True)
