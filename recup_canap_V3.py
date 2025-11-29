@@ -52,4 +52,4 @@ def analyse_image(
             )
 
 
-analyse_image("MEDIA/IMG", 20)
+analyse_image("MEDIA/IMG", 5)
