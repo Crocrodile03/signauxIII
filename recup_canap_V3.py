@@ -3,14 +3,14 @@ from ultralytics import YOLO
 from PIL import Image
 
 # Crée le dossier "IMG" s’il n’existe pas déjà
-OUTPUT_DIR = "VID/IMG"
+OUTPUT_DIR = "MEDIA/OBJ_DETECT"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Charger le modèle
 model = YOLO("yolov8n.pt")
 
 # Image d'entrée
-IMAGE_PATH = "MEDIA/IMG/lit_avec_pers.jpg"
+IMAGE_PATH = input("path image: ")
 results = model(IMAGE_PATH)
 results[0].show()
 
