@@ -1,6 +1,7 @@
 from ultralytics import YOLO
 import cv2
 import os
+from traitement_images import eclaircissement_image
 
 
 def boxes_intersect(boxA, boxB):
@@ -19,7 +20,7 @@ def analyse_image(image_path: str) -> bool:
     model = YOLO("yolov8n.pt")
 
     # Charger ton image (ou une frame vidéo)
-    results = model(image_path)[0]
+    results = model(eclaircissement_image(image_path))[0]
 
     # Extraire les détections
     persons = []

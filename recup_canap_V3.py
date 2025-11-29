@@ -1,6 +1,7 @@
 import os
 from ultralytics import YOLO
 from PIL import Image
+from traitement_images import eclaircissement_image
 
 # Crée le dossier "IMG" s’il n’existe pas déjà
 OUTPUT_DIR = "MEDIA/OBJ_DETECT"
@@ -11,15 +12,15 @@ model = YOLO("yolov8n.pt")
 
 # Image d'entrée
 IMAGE_PATH = input("path image: ")
-results = model(IMAGE_PATH)
-results[0].show()
+results = model(eclaircissement_image(IMAGE_PATH, method="gamma", gamma=0.5))[0]
+results.show()
 
 # Ouvrir l'image avec PIL
 img = Image.open(IMAGE_PATH)
 
 # Parcourir toutes les détections
 COUNT = 0
-for box in results[0].boxes:
+for box in results.boxes:
     cls = int(box.cls[0])
     label = model.names[cls]
 
