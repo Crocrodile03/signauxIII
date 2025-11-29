@@ -12,7 +12,7 @@ model = YOLO("yolov8n.pt")
 
 # Image d'entrée
 IMAGE_PATH = input("path image: ")
-results = model(eclaircissement_image(IMAGE_PATH, method="gamma", gamma=0.5))[0]
+results = model(IMAGE_PATH)[0]
 results.show()
 
 # Ouvrir l'image avec PIL
