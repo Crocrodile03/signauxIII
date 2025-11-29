@@ -148,6 +148,9 @@ def main():
                 saved_photos += 1
                 # tsf = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
                 video_name_sans_ext = video_name.split(".")[0]
+                test = video_name_sans_ext.split("_")
+                test[1] = test[1].zfill(3)
+                video_name_sans_ext.join("_")
                 photo_name = f"{video_name_sans_ext}_{str(saved_photos).zfill(3)}.jpg"
                 photo_path = os.path.join(photos_dir, photo_name)
                 cv2.imwrite(photo_path, frame)

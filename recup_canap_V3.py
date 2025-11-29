@@ -10,22 +10,22 @@ def analyse_image(
     # Crée le dossier "IMG" s’il n’existe pas déjà
     OUTPUT_DIR = dir_path_obj
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    images = [f for f in os.listdir(dir_path_img) if f.endswith((".jpg", ".png"))][
-        nb_image:
-    ]
+    images = [f for f in os.listdir(dir_path_img) if f.endswith((".jpg", ".png"))]
+    last_images = images[-nb_image:]
+    print(last_images)
     # Charger le modèle
     model = YOLO("yolov8n.pt")
-    for image in images:
+    # Parcourir toutes les détections
+    COUNT = 0
+    for image in last_images:
         # Image d'entrée
-        IMAGE_PATH = f"{dir_path_img}\{image}"
+        IMAGE_PATH = f"{dir_path_img}\\{image}"
         results = model(IMAGE_PATH)[0]
         results.show()
 
         # Ouvrir l'image avec PIL
         img = Image.open(IMAGE_PATH)
 
-        # Parcourir toutes les détections
-        COUNT = 0
         for box in results.boxes:
             cls = int(box.cls[0])
             label = model.names[cls]
@@ -50,3 +50,6 @@ def analyse_image(
             print(
                 f"🎉 {COUNT} objet(s) détecté(s) et sauvegardé(s) dans le dossier {OUTPUT_DIR}/."
             )
+
+
+analyse_image("MEDIA/IMG", 20)
