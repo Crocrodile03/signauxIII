@@ -3,6 +3,7 @@ import os
 import time
 import argparse
 from datetime import datetime
+from interface_user import get_next_video_name
 
 
 def parse_args():
@@ -108,8 +109,8 @@ def main():
     if args.video_out:
         video_path = os.path.join(video_dir, args.video_out)
     else:
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        video_path = os.path.join(video_dir, f"capture_{ts}.avi")
+        video_name = get_next_video_name()
+        video_path = os.path.join(video_dir, f"{video_name}")
 
     fourcc = cv2.VideoWriter_fourcc(*args.codec)
     writer = cv2.VideoWriter(video_path, fourcc, fps, (width, height))
@@ -143,11 +144,12 @@ def main():
 
             # Sauvegarder une photo si l'intervalle est atteint
             if now - last_photo >= args.photo_interval:
-                tsf = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
-                photo_name = f"photo_{tsf}.jpg"
+                saved_photos += 1
+                # tsf = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
+                video_name_sans_ext = video_name.split(".")[0]
+                photo_name = f"{video_name_sans_ext}_{saved_photos}.jpg"
                 photo_path = os.path.join(photos_dir, photo_name)
                 cv2.imwrite(photo_path, frame)
-                saved_photos += 1
                 last_photo = now
                 print(f"✅ Photo sauvegardée: {photo_path} (#{saved_photos})")
 

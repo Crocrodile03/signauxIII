@@ -43,7 +43,7 @@ def get_next_video_name(video_dir="Media/VID"):
     ]
     next_number = len(existing_videos) + 1
 
-    return f"video_{next_number}.avi"
+    return f"video_{next_number}.mp4"
 
 
 def prompt_optional_string(message, default=None):
