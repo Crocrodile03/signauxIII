@@ -1,7 +1,8 @@
 import os
 from ultralytics import YOLO
 from PIL import Image
-from traitement_images import eclaircissement_image
+from ameliration_image import ameliorer_image
+import numpy as np
 
 
 def analyse_image(
@@ -12,7 +13,6 @@ def analyse_image(
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     images = [f for f in os.listdir(dir_path_img) if f.endswith((".jpg", ".png"))]
     last_images = images[-nb_image:]
-    print(last_images)
     # Charger le modèle
     model = YOLO("yolov8n.pt")
     # Parcourir toutes les détections
@@ -20,11 +20,28 @@ def analyse_image(
     for image in last_images:
         # Image d'entrée
         IMAGE_PATH = f"{dir_path_img}\\{image}"
-        results = model(IMAGE_PATH)[0]
+
+        # Prétraitement : utiliser ameliorer_image
+        proc = ameliorer_image(IMAGE_PATH)  # retourne float dans [0,1]
+        # convertir en uint8 3-canaux pour PIL / ultralytics
+        if isinstance(proc, np.ndarray):
+            proc_u8 = (np.clip(proc, 0.0, 1.0) * 255).astype(np.uint8)
+            if proc_u8.ndim == 2:  # niveau de gris -> RGB
+                proc_rgb = np.stack([proc_u8] * 3, axis=-1)
+            elif proc_u8.ndim == 3 and proc_u8.shape[2] == 4:  # RGBA -> RGB
+                proc_rgb = proc_u8[..., :3]
+            else:
+                proc_rgb = proc_u8
+        else:
+            # fallback : ouvrir l'image d'origine
+            proc_rgb = np.array(Image.open(IMAGE_PATH).convert("RGB"), dtype=np.uint8)
+
+        # Inférence sur l'image prétraitée (ndarray)
+        results = model(proc_rgb)[0]
         results.show()
 
-        # Ouvrir l'image avec PIL
-        img = Image.open(IMAGE_PATH)
+        # Préparer image PIL pour les découpes (utiliser l'image traitée)
+        img = Image.fromarray(proc_rgb)
 
         for box in results.boxes:
             cls = int(box.cls[0])
@@ -52,4 +69,4 @@ def analyse_image(
             )
 
 
-analyse_image("MEDIA/IMG", 5)
+analyse_image("MEDIA/IMG", 3)

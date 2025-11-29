@@ -30,12 +30,12 @@ import numpy as np
 # plt.imshow(I_hist, cmap='gray')
 
 
-
 # skim.io.imsave('test.jpg', skim.util.img_as_ubyte(I_gamma))
 
 # plt.show()
 
-def ameliorer_image(img: np.ndarray) -> np.ndarray:
+
+def ameliorer_image(img_path: str) -> np.ndarray:
     """
     Prend une image (NumPy array), applique:
       - conversion en niveaux de gris
@@ -48,7 +48,8 @@ def ameliorer_image(img: np.ndarray) -> np.ndarray:
     """
 
     # Convertit en niveaux de gris si l'image est couleur
-    img = skim.color.rgb2gray(img)
+    I = plt.imread(img_path)
+    img = skim.color.rgb2gray(I)
 
     # Pipeline simple
     I_inv = skim.util.invert(img)
@@ -59,8 +60,9 @@ def ameliorer_image(img: np.ndarray) -> np.ndarray:
 
     return I_hist
 
+
 if __name__ == "__main__":
-    I = plt.imread('./MEDIA/IMG/video_003_008.jpg')
+    I = plt.imread("./MEDIA/IMG/video_003_008.jpg")
     I_amelioree = ameliorer_image(I)
-    plt.imshow(I_amelioree, cmap='gray')
+    plt.imshow(I_amelioree, cmap="gray")
     plt.show()
