@@ -174,6 +174,9 @@ def main():
             writer.release()
         cv2.destroyAllWindows()
         print(f"Terminé. Vidéo: {video_path} — Photos sauvegardées: {saved_photos}")
+        print(
+            f"Terminé. Analyse des {saved_photos} photo{"s" if saved_photos > 1 else ""}"
+        )
         analyse_image("MEDIA/IMG", saved_photos)
 
 

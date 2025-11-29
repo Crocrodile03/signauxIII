@@ -69,4 +69,5 @@ def analyse_image(
             )
 
 
-analyse_image("MEDIA/IMG", 3)
+if __name__ == "__main__":
+    analyse_image("MEDIA/IMG", 12)
