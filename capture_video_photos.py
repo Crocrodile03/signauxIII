@@ -4,6 +4,7 @@ import time
 import argparse
 from datetime import datetime
 from interface_user import get_next_video_name
+from recup_canap_V3 import analyse_image
 
 
 def parse_args():
@@ -170,6 +171,7 @@ def main():
             writer.release()
         cv2.destroyAllWindows()
         print(f"Terminé. Vidéo: {video_path} — Photos sauvegardées: {saved_photos}")
+        analyse_image("MEDIA/IMG", saved_photos)
 
 
 if __name__ == "__main__":
