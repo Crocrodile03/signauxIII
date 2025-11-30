@@ -102,6 +102,7 @@ def main():
     video_dir = Path("Media/VID")
     photos_dir = Path(args.photos_dir)
     detections_dir = Path(args.detections_dir)
+    use_preprocessing = True
 
     for d in [video_dir, photos_dir, detections_dir]:
         d.mkdir(parents=True, exist_ok=True)
@@ -146,7 +147,8 @@ def main():
             ret, frame = cap.read()
             if not ret:
                 print("❌ Erreur lecture frame")
-                break
+                saved_photos = 5
+                return
 
             now = time.time()
 
@@ -170,7 +172,14 @@ def main():
 
                 # Analyser l'image
                 print(f"\n📸 Analyse de {photo_name}...")
-                result = analyse_image(str(photo_path), model=model, verbose=True)
+                result = analyse_image(
+                    str(photo_path),
+                    model=model,
+                    verbose=True,
+                    use_preprocessing=use_preprocessing,
+                    iou_threshold=0.2,
+                    overlap_threshold=0.4,
+                )
                 detection_results.append(result)
 
                 # Dessiner les détections
@@ -256,6 +265,7 @@ def main():
             str(photos_dir),
             nb_image=saved_photos,
             dir_path_obj=str(detections_dir / "OBJ_DETECT"),
+            use_preprocessing=use_preprocessing,
         )
         print("\n✅ Pipeline complet terminé!")
 

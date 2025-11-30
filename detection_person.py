@@ -73,6 +73,7 @@ def analyse_image(
     iou_threshold: float = 0.3,
     overlap_threshold: float = 0.5,
     verbose: bool = True,
+    use_preprocessing: bool = True,
 ) -> DetectionResult:
     """
     Analyse une image pour détecter si une personne est dans un lit.
@@ -90,11 +91,21 @@ def analyse_image(
     if model is None:
         model = YOLO("yolov8n.pt")
 
-    # Améliorer l'image
-    img_amelioree = ameliorer_image(image_path, retourner_uint8=True)
+    # Tester AVEC et SANS prétraitement
+    if use_preprocessing:
+        if verbose:
+            print("🔄 Utilisation du prétraitement d'image...")
+        img_amelioree = ameliorer_image(image_path, retourner_uint8=True)
+    else:
+        if verbose:
+            print("📷 Utilisation de l'image originale...")
+        img_original = cv2.imread(image_path)
+        img_amelioree = cv2.cvtColor(img_original, cv2.COLOR_BGR2RGB)
 
-    # Détection
-    results = model(img_amelioree, verbose=False)[0]
+    # Détection avec confiance abaissée
+    results = model(img_amelioree, conf=0.25, verbose=False)[
+        0
+    ]  # conf=0.25 au lieu de 0.5
 
     persons = []
     beds = []
@@ -106,7 +117,7 @@ def analyse_image(
 
         if label == "person":
             persons.append((x1, y1, x2, y2))
-        elif label in ["bed", "couch", "suitcase"]:
+        elif label in ["bed", "couch", "suitcase", "bench"]:
             beds.append((x1, y1, x2, y2))
 
     # Vérifier si les éléments nécessaires sont détectés

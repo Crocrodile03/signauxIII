@@ -3,10 +3,14 @@ from ultralytics import YOLO
 from PIL import Image
 from ameliration_image import ameliorer_image
 import numpy as np
+import cv2
 
 
 def affichage_boxes(
-    dir_path_img, nb_image: int = 10, dir_path_obj: str = "Media/IMG/OBJ_DETECT"
+    dir_path_img,
+    nb_image: int = 10,
+    dir_path_obj: str = "Media/IMG/OBJ_DETECT",
+    use_preprocessing: bool = True,  # Nouveau paramètre
 ):
     # Crée le dossier "IMG" s’il n’existe pas déjà
     OUTPUT_DIR = dir_path_obj
@@ -22,7 +26,10 @@ def affichage_boxes(
         IMAGE_PATH = f"{dir_path_img}\\{image}"
 
         # Prétraitement : utiliser ameliorer_image
-        proc = ameliorer_image(IMAGE_PATH)  # retourne float dans [0,1]
+        if use_preprocessing:
+            proc = ameliorer_image(IMAGE_PATH)  # retourne float dans [0,1]
+        else:
+            proc = cv2.cvtColor(cv2.imread(IMAGE_PATH), cv2.COLOR_BGR2RGB)
         # convertir en uint8 3-canaux pour PIL / ultralytics
         if isinstance(proc, np.ndarray):
             proc_u8 = (np.clip(proc, 0.0, 1.0) * 255).astype(np.uint8)
