@@ -6,7 +6,7 @@ import numpy as np
 
 
 def affichage_boxes(
-    dir_path_img, nb_image: int, dir_path_obj: str = "Media/IMG/OBJ_DETECT"
+    dir_path_img, nb_image: int = 10, dir_path_obj: str = "Media/IMG/OBJ_DETECT"
 ):
     # Crée le dossier "IMG" s’il n’existe pas déjà
     OUTPUT_DIR = dir_path_obj
@@ -70,4 +70,4 @@ def affichage_boxes(
 
 
 if __name__ == "__main__":
-    affichage_boxes("MEDIA/IMG", 12)
+    affichage_boxes("MEDIA/IMG", nb_image=12)

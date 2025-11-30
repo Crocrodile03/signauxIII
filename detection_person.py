@@ -1,136 +1,229 @@
 from ultralytics import YOLO
 import cv2
-import os
-from ameliration_image import ameliorer_image
 import numpy as np
+from pathlib import Path
+from typing import List, Tuple, Dict, Optional
+from ameliration_image import ameliorer_image
 
 
-def calculate_iou(boxA, boxB):
+class DetectionResult:
+    """Résultat d'une détection"""
+
+    def __init__(
+        self,
+        image_path: str,
+        person_in_bed: bool,
+        persons: List[Tuple],
+        beds: List[Tuple],
+        iou: float = 0.0,
+        overlap: float = 0.0,
+        status_message: str = "",
+    ):
+        self.image_path = image_path
+        self.person_in_bed = person_in_bed
+        self.persons = persons
+        self.beds = beds
+        self.iou = iou
+        self.overlap = overlap
+        self.status_message = status_message
+
+    def __repr__(self):
+        if self.status_message:
+            return f"{Path(self.image_path).name}: ⚠️ {self.status_message}"
+        status = "✅ Dans le lit" if self.person_in_bed else "🚨 CHUTE"
+        return f"{Path(self.image_path).name}: {status} (IoU={self.iou:.2f}, Overlap={self.overlap:.2f})"
+
+
+def calculate_iou(boxA: Tuple, boxB: Tuple) -> float:
     """Calcule l'Intersection over Union (IoU) entre deux boxes"""
     xA = max(boxA[0], boxB[0])
     yA = max(boxA[1], boxB[1])
     xB = min(boxA[2], boxB[2])
     yB = min(boxA[3], boxB[3])
 
-    inter_width = max(0, xB - xA)
-    inter_height = max(0, yB - yA)
-    inter_area = inter_width * inter_height
-
+    inter_area = max(0, xB - xA) * max(0, yB - yA)
     if inter_area == 0:
         return 0.0
 
-    # Aire de chaque box
     boxA_area = (boxA[2] - boxA[0]) * (boxA[3] - boxA[1])
     boxB_area = (boxB[2] - boxB[0]) * (boxB[3] - boxB[1])
-
-    # IoU = intersection / union
     union_area = boxA_area + boxB_area - inter_area
-    iou = inter_area / union_area
 
-    return iou
+    return inter_area / union_area if union_area > 0 else 0.0
 
 
-def calculate_overlap_ratio(person_box, bed_box):
+def calculate_overlap_ratio(person_box: Tuple, bed_box: Tuple) -> float:
     """Calcule le ratio de la personne qui se trouve dans le lit"""
     xA = max(person_box[0], bed_box[0])
     yA = max(person_box[1], bed_box[1])
     xB = min(person_box[2], bed_box[2])
     yB = min(person_box[3], bed_box[3])
 
-    inter_width = max(0, xB - xA)
-    inter_height = max(0, yB - yA)
-    inter_area = inter_width * inter_height
-
+    inter_area = max(0, xB - xA) * max(0, yB - yA)
     if inter_area == 0:
         return 0.0
 
-    # Aire de la personne
     person_area = (person_box[2] - person_box[0]) * (person_box[3] - person_box[1])
-
-    # Ratio de la personne dans le lit
-    overlap_ratio = inter_area / person_area
-
-    return overlap_ratio
+    return inter_area / person_area if person_area > 0 else 0.0
 
 
 def analyse_image(
-    image_path: str, iou_threshold: float = 0.4, overlap_threshold: float = 0.6
-) -> bool:
+    image_path: str,
+    model: YOLO = None,
+    iou_threshold: float = 0.3,
+    overlap_threshold: float = 0.5,
+    verbose: bool = True,
+) -> DetectionResult:
     """
     Analyse une image pour détecter si une personne est dans un lit.
 
     Args:
         image_path: Chemin de l'image
-        iou_threshold: Seuil IoU minimum pour considérer une superposition (défaut: 0.1)
-        overlap_threshold: Ratio minimum de la personne qui doit être dans le lit (défaut: 0.3 = 30%)
+        model: Modèle YOLO (créé automatiquement si None)
+        iou_threshold: Seuil IoU minimum
+        overlap_threshold: Ratio minimum de la personne dans le lit
+        verbose: Afficher les détails
 
     Returns:
-        True si une personne est détectée dans le lit, False sinon
+        DetectionResult avec les informations de détection
     """
-    # Charger le modèle
-    model = YOLO("yolov8n.pt")
+    if model is None:
+        model = YOLO("yolov8n.pt")
 
-    # Améliorer l'image et la convertir en RGB pour YOLO
-    img_amelioree = ameliorer_image(image_path)
+    # Améliorer l'image
+    img_amelioree = ameliorer_image(image_path, retourner_uint8=True)
 
-    # S'assurer que l'image a 3 canaux (RGB)
-    if len(img_amelioree.shape) == 2:  # Image en niveaux de gris
-        import skimage as skim
+    # Détection
+    results = model(img_amelioree, verbose=False)[0]
 
-        img_amelioree = skim.color.gray2rgb(img_amelioree)
-    elif img_amelioree.shape[2] == 1:  # Image avec 1 canal
-        img_amelioree = np.repeat(img_amelioree, 3, axis=2)
-
-    # Charger ton image (ou une frame vidéo)
-    results = model(img_amelioree)[0]
-
-    # Extraire les détections
     persons = []
     beds = []
 
     for box in results.boxes:
         cls = int(box.cls[0])
         label = model.names[cls]
-
         x1, y1, x2, y2 = map(int, box.xyxy[0])
 
         if label == "person":
             persons.append((x1, y1, x2, y2))
-        elif label in ["bed", "beds", "couch"]:
+        elif label in ["bed", "couch", "suitcase"]:
             beds.append((x1, y1, x2, y2))
 
-    # Vérifier si une personne est dans/sur un lit
-    person_on_bed = False
+    # Vérifier si les éléments nécessaires sont détectés
+    if not persons and not beds:
+        if verbose:
+            print("⚠️ Aucune personne ni lit détecté")
+        return DetectionResult(
+            image_path, False, persons, beds, 0.0, 0.0, "Aucune personne ni lit detecte"
+        )
+
+    if not persons:
+        if verbose:
+            print("⚠️ Aucune personne détectée")
+        return DetectionResult(
+            image_path, False, persons, beds, 0.0, 0.0, "Aucune personne detectee"
+        )
+
+    if not beds:
+        if verbose:
+            print("⚠️ Aucun lit détecté")
+        return DetectionResult(
+            image_path, False, persons, beds, 0.0, 0.0, "Aucun lit detecte"
+        )
+
+    # Vérification personne dans lit (si les deux sont présents)
+    person_in_bed = False
+    max_iou = 0.0
+    max_overlap = 0.0
 
     for bed in beds:
         for person in persons:
             iou = calculate_iou(bed, person)
-            overlap_ratio = calculate_overlap_ratio(person, bed)
+            overlap = calculate_overlap_ratio(person, bed)
 
-            # Une personne est considérée dans le lit si:
-            # - Il y a une superposition (IoU > seuil)
-            # - OU si au moins X% de la personne est dans le lit
-            if iou > iou_threshold or overlap_ratio > overlap_threshold:
-                person_on_bed = True
-                print(
-                    f"Personne détectée dans le lit - IoU: {iou:.2f}, Overlap: {overlap_ratio:.2f}"
-                )
+            max_iou = max(max_iou, iou)
+            max_overlap = max(max_overlap, overlap)
+
+            if iou > iou_threshold or overlap > overlap_threshold:
+                person_in_bed = True
+                if verbose:
+                    print(
+                        f"✅ Personne dans le lit - IoU: {iou:.2f}, Overlap: {overlap:.2f}"
+                    )
                 break
 
-        if person_on_bed:
+        if person_in_bed:
             break
 
-    print(f"{beds = }\n{persons = }")
-    print(f"Personne dans le lit: {person_on_bed}")
+    if verbose and not person_in_bed:
+        print(f"🚨 CHUTE DÉTECTÉE - {len(persons)} personne(s), {len(beds)} lit(s)")
 
-    return person_on_bed
+    return DetectionResult(
+        image_path, person_in_bed, persons, beds, max_iou, max_overlap
+    )
 
 
-def lecture_dossier(dir_path: str):
-    images = [f for f in os.listdir(dir_path) if f.endswith((".jpg", ".png"))]
-    detection_chute = {}
-    for image in images:
-        person_in_bed = analyse_image(f"MEDIA/IMG/{image}")
-        detect = "no chute" if person_in_bed else f"\033[91mchute\033[0m"
-        detection_chute[image] = detection_chute.get(image, detect)
-    return detection_chute
+def dessiner_detections(
+    image_path: str, result: DetectionResult, output_path: str = None
+) -> np.ndarray:
+    """
+    Dessine les détections sur l'image
+
+    Args:
+        image_path: Chemin de l'image originale
+        result: Résultat de la détection
+        output_path: Chemin de sauvegarde (optionnel)
+
+    Returns:
+        Image avec les détections dessinées
+    """
+    img = cv2.imread(image_path)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+    # Si message de statut (détection incomplète)
+    if result.status_message:
+        color = (255, 165, 0)  # Orange
+        cv2.putText(
+            img, result.status_message, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2
+        )
+        if output_path:
+            cv2.imwrite(output_path, cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+        return img
+
+    # Dessiner les lits en bleu
+    for bed in result.beds:
+        cv2.rectangle(img, (bed[0], bed[1]), (bed[2], bed[3]), (0, 0, 255), 2)
+        cv2.putText(
+            img,
+            "Lit",
+            (bed[0], bed[1] - 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 0, 255),
+            2,
+        )
+
+    # Dessiner les personnes (vert si dans lit, rouge sinon)
+    for person in result.persons:
+        color = (0, 255, 0) if result.person_in_bed else (255, 0, 0)
+        cv2.rectangle(img, (person[0], person[1]), (person[2], person[3]), color, 2)
+        label = "Personne (OK)" if result.person_in_bed else "CHUTE!"
+        cv2.putText(
+            img,
+            label,
+            (person[0], person[1] - 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            color,
+            2,
+        )
+
+    # Ajouter le statut global
+    status = "Dans le lit" if result.person_in_bed else "CHUTE DETECTEE"
+    color = (0, 255, 0) if result.person_in_bed else (255, 0, 0)
+    cv2.putText(img, status, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+
+    if output_path:
+        cv2.imwrite(output_path, cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+
+    return img

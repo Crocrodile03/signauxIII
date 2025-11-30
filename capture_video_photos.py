@@ -2,205 +2,262 @@ import cv2
 import os
 import time
 import argparse
-from datetime import datetime
+from pathlib import Path
+from ultralytics import YOLO
 from interface_user import get_next_video_name
-from detection_person import analyse_image
+from detection_person import analyse_image, dessiner_detections, DetectionResult
 from recup_canap_V3 import affichage_boxes
+from typing import List
 
 
 def parse_args():
-    p = argparse.ArgumentParser(
-        description="Enregistrer une vidéo et prendre des photos périodiques avec la webcam"
-    )
+    p = argparse.ArgumentParser(description="Système de surveillance de chute")
     p.add_argument(
         "--duration",
         "-d",
         type=float,
         default=30.0,
-        help="Durée de la vidéo en secondes (défaut: 30)",
+        help="Durée en secondes (défaut: 30)",
     )
     p.add_argument(
         "--photo-interval",
         "-i",
         type=float,
         default=5.0,
-        help="Intervalle en secondes entre chaque photo (défaut: 5)",
+        help="Intervalle entre photos en secondes (défaut: 5)",
     )
     p.add_argument(
-        "--video-out",
+        "--photos-dir", type=str, default="MEDIA/IMG", help="Dossier des photos"
+    )
+    p.add_argument(
+        "--detections-dir",
         type=str,
-        default=None,
-        help="Nom du fichier vidéo de sortie (dans dossier video/). Par défaut horodaté.",
+        default="MEDIA/DETECTIONS",
+        help="Dossier pour les images avec détections",
+    )
+    p.add_argument("--camera", type=int, default=0, help="Index caméra")
+    p.add_argument("--fps", type=float, default=30.0, help="FPS vidéo")
+    p.add_argument(
+        "--no-display", action="store_true", help="Ne pas afficher la fenêtre live"
     )
     p.add_argument(
-        "--photos-dir",
-        type=str,
-        default="MEDIA/IMG",
-        help="Dossier pour sauvegarder les photos (défaut: MEDIA/IMG)",
-    )
-    p.add_argument(
-        "--camera", type=int, default=0, help="Index de la caméra (défaut: 0)"
-    )
-    p.add_argument(
-        "--fps",
-        type=float,
-        default=30.0,
-        help="FPS pour l'enregistrement vidéo (essayer 20-30)",
-    )
-    p.add_argument(
-        "--codec",
-        type=str,
-        default="XVID",
-        help="Codec fourcc pour la vidéo (ex: XVID, MJPG)",
-    )
-    p.add_argument(
-        "--backend",
+        "--resolution",
         type=str,
         default="auto",
-        help="Backend OpenCV à utiliser (auto, dshow, msmf, vfw, ffmpeg)",
+        help="Résolution (auto, 640x480, 1280x720, 1920x1080)",
     )
     return p.parse_args()
 
 
-def open_camera(index, backend):
-    backend_map = {
-        "dshow": cv2.CAP_DSHOW,
-        "msmf": cv2.CAP_MSMF,
-        "vfw": cv2.CAP_VFW,
-        "ffmpeg": cv2.CAP_FFMPEG,
-    }
-    if backend != "auto":
-        flag = backend_map.get(backend.lower())
-        if flag is not None:
-            return cv2.VideoCapture(index, flag)
-        else:
-            print(f"Backend inconnu '{backend}', utilisation automatique.")
-    try:
-        import platform
+def configure_camera(cap, resolution: str = "auto"):
+    """
+    Configure la caméra avec la meilleure résolution
 
-        if platform.system().lower() == "windows":
-            return cv2.VideoCapture(index, cv2.CAP_DSHOW)
-    except Exception:
-        pass
-    return cv2.VideoCapture(index)
+    Args:
+        cap: Objet VideoCapture
+        resolution: Résolution souhaitée (auto, 640x480, 1280x720, 1920x1080)
+
+    Returns:
+        tuple: (width, height, fps)
+    """
+    # Résolutions communes
+    resolutions = {
+        "1920x1080": (1920, 1080),
+        "1280x720": (1280, 720),
+        "640x480": (640, 480),
+        "320x240": (320, 240),
+    }
+
+    if resolution != "auto" and resolution in resolutions:
+        w, h = resolutions[resolution]
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+
+    # Lire les dimensions actuelles de la caméra
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+
+    # Si FPS invalide, utiliser valeur par défaut
+    if fps <= 0 or fps > 120:
+        fps = 30.0
+
+    print(f"📷 Résolution caméra: {width}x{height} @ {fps:.1f} FPS")
+
+    # Tester en lisant une frame
+    ret, test_frame = cap.read()
+    if ret:
+        actual_height, actual_width = test_frame.shape[:2]
+        if actual_width != width or actual_height != height:
+            print(f"⚠️  Résolution réelle détectée: {actual_width}x{actual_height}")
+            width, height = actual_width, actual_height
+
+    return width, height, fps
 
 
 def main():
     args = parse_args()
 
-    video_dir = os.path.join("Media", "VID")
-    photos_dir = args.photos_dir
-    os.makedirs(video_dir, exist_ok=True)
-    os.makedirs(photos_dir, exist_ok=True)
+    # Créer les dossiers
+    video_dir = Path("Media/VID")
+    photos_dir = Path(args.photos_dir)
+    detections_dir = Path(args.detections_dir)
 
-    cap = open_camera(args.camera, args.backend)
+    for d in [video_dir, photos_dir, detections_dir]:
+        d.mkdir(parents=True, exist_ok=True)
+
+    # Initialiser YOLO une seule fois
+    print("🔄 Chargement du modèle YOLO...")
+    model = YOLO("yolov8n.pt")
+    print("✅ Modèle chargé")
+
+    # Ouvrir la caméra
+    cap = cv2.VideoCapture(args.camera, cv2.CAP_DSHOW)
     if not cap.isOpened():
-        print(
-            f"Erreur: impossible d'ouvrir la caméra {args.camera} (backend={args.backend})."
-        )
+        print(f"❌ Erreur: impossible d'ouvrir la caméra {args.camera}")
         return
 
-    # Dimensions
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 640
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 480
+    # Configurer la caméra et obtenir les vraies dimensions
+    width, height, fps = configure_camera(cap, args.resolution)
 
-    # FPS: préférer la valeur fournie, mais tenter de lire la valeur de la caméra
-    cam_fps = cap.get(cv2.CAP_PROP_FPS)
-    fps = args.fps if args.fps and args.fps > 0 else (cam_fps if cam_fps > 0 else 20.0)
+    # Utiliser le FPS des arguments si spécifié, sinon celui de la caméra
+    if args.fps != 30.0:
+        fps = args.fps
 
-    if args.video_out:
-        video_path = os.path.join(video_dir, args.video_out)
-    else:
-        video_name = get_next_video_name()
-        video_path = os.path.join(video_dir, f"{video_name}")
+    # Préparer l'enregistrement vidéo
+    video_name = get_next_video_name()
+    video_path = video_dir / video_name
+    fourcc = cv2.VideoWriter_fourcc(*"XVID")
+    writer = cv2.VideoWriter(str(video_path), fourcc, fps, (width, height))
 
-    fourcc = cv2.VideoWriter_fourcc(*args.codec)
-    writer = cv2.VideoWriter(video_path, fourcc, fps, (width, height))
-    if not writer.isOpened():
-        print(
-            "Avertissement: VideoWriter n'a pas pu s'ouvrir. Vérifiez le codec ou les permissions."
-        )
-
-    print(
-        f"Enregistrement vidéo: {video_path} durée={args.duration}s fps={fps} taille=({width}x{height})"
-    )
-    print(f"Sauvegarde photos toutes les {args.photo_interval}s dans {photos_dir}")
-    print("Appuyez sur 'q' pour interrompre prématurément.")
+    print(f"\n{'='*60}")
+    print(f"🎥 Enregistrement: {video_path}")
+    print(f"📐 Dimensions: {width}x{height} @ {fps:.1f} FPS")
+    print(f"⏱️  Durée: {args.duration}s | 📸 Intervalle photos: {args.photo_interval}s")
+    print(f"{'='*60}\n")
 
     start = time.time()
     last_photo = start - args.photo_interval
     saved_photos = 0
-    detection_results = []
+    detection_results: List[DetectionResult] = []
+
     try:
         while True:
             ret, frame = cap.read()
             if not ret:
-                print("Erreur: frame introuvable depuis la caméra.")
+                print("❌ Erreur lecture frame")
                 break
 
             now = time.time()
 
-            # Écrire la frame dans la vidéo
-            if writer.isOpened():
-                writer.write(frame)
+            # Vérifier que la frame a les bonnes dimensions
+            if frame.shape[1] != width or frame.shape[0] != height:
+                frame = cv2.resize(frame, (width, height))
 
-            # Sauvegarder une photo si l'intervalle est atteint
+            writer.write(frame)
+
+            # Capturer et analyser photo
             if now - last_photo >= args.photo_interval:
                 saved_photos += 1
-                video_name_sans_ext = video_name.split(".")[0]
-                test = video_name_sans_ext.split("_")
-                test[1] = test[1].zfill(3)
-                video_name_sans_ext = "_".join(test)
-                photo_name = f"{video_name_sans_ext}_{str(saved_photos).zfill(3)}.jpg"
-                photo_path = os.path.join(photos_dir, photo_name)
-                cv2.imwrite(photo_path, frame)
+                video_base = video_name.split(".")[0]
+                parts = video_base.split("_")
+                parts[1] = parts[1].zfill(3)
+                photo_name = f"{'_'.join(parts)}_{str(saved_photos).zfill(3)}.jpg"
+                photo_path = photos_dir / photo_name
+
+                cv2.imwrite(str(photo_path), frame)
                 last_photo = now
 
                 # Analyser l'image
-                person_in_bed = analyse_image(photo_path)
-                status = (
-                    "Personne dans le lit ✅"
-                    if person_in_bed
-                    else "\033[91mCHUTE DÉTECTÉE ⚠️\033[0m"
-                )
-                detection_results.append((photo_name, person_in_bed))
+                print(f"\n📸 Analyse de {photo_name}...")
+                result = analyse_image(str(photo_path), model=model, verbose=True)
+                detection_results.append(result)
 
-                print(
-                    f"✅ Photo sauvegardée: {photo_path} (#{saved_photos}) — {status}"
-                )
+                # Dessiner les détections
+                detection_path = detections_dir / f"detection_{photo_name}"
+                dessiner_detections(str(photo_path), result, str(detection_path))
+
+                if result.status_message:
+                    status_emoji = "⚠️"
+                elif result.person_in_bed:
+                    status_emoji = "✅"
+                else:
+                    status_emoji = "🚨"
+                print(f"{status_emoji} {result}")
 
             # Affichage live
-            cv2.imshow("Enregistrement", frame)
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                print("Interrompu par l'utilisateur.")
-                break
+            if not args.no_display:
+                elapsed = int(now - start)
+                remaining = int(args.duration - elapsed)
 
-            # Fin si durée atteinte
+                # Frame pour affichage (clone pour ne pas modifier l'original)
+                display_frame = frame.copy()
+
+                cv2.putText(
+                    display_frame,
+                    f"Temps restant: {remaining}s",
+                    (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    (0, 255, 0),
+                    2,
+                )
+                cv2.putText(
+                    display_frame,
+                    f"{width}x{height}",
+                    (10, height - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (255, 255, 255),
+                    1,
+                )
+
+                cv2.imshow("Surveillance", display_frame)
+                if cv2.waitKey(1) & 0xFF == ord("q"):
+                    print("\n⚠️ Interrompu par l'utilisateur")
+                    break
+
             if now - start >= args.duration:
-                print(f"Durée atteinte ({args.duration}s). Fin de l'enregistrement.")
+                print(f"\n✅ Durée atteinte ({args.duration}s)")
                 break
 
     finally:
         cap.release()
-        if writer.isOpened():
-            writer.release()
+        writer.release()
         cv2.destroyAllWindows()
-        print(f"\nTerminé. Vidéo: {video_path} — Photos sauvegardées: {saved_photos}")
-        affichage_boxes(photos_dir, saved_photos)
-        # Résumé des détections
-        print("\n" + "=" * 60)
-        print("RÉSUMÉ DES DÉTECTIONS")
-        print("=" * 60)
-        chutes_detectees = 0
-        for photo, in_bed in detection_results:
-            status = "Dans le lit" if in_bed else "\033[91mCHUTE\033[0m"
-            print(f"{photo}: {status}")
-            if not in_bed:
-                chutes_detectees += 1
 
-        print("=" * 60)
-        print(f"Total: {saved_photos} photo(s) — Chutes détectées: {chutes_detectees}")
-        print("=" * 60)
+        # Rapport final
+        print(f"\n{'='*60}")
+        print("📊 RÉSUMÉ DES DÉTECTIONS")
+        print(f"{'='*60}")
+
+        chutes = 0
+        avertissements = 0
+        ok = 0
+
+        for result in detection_results:
+            print(result)
+            if result.status_message:
+                avertissements += 1
+            elif not result.person_in_bed:
+                chutes += 1
+            else:
+                ok += 1
+
+        print(f"{'='*60}")
+        print(f"📹 Vidéo: {video_path}")
+        print(f"📸 Photos: {saved_photos}")
+        print(f"✅ OK: {ok} | 🚨 Chutes: {chutes} | ⚠️ Avertissements: {avertissements}")
+        print(f"{'='*60}\n")
+
+        # Afficher les boxes avec détections d'objets
+        print("\n🔍 Détection et extraction des objets (lit, canapé)...")
+        affichage_boxes(
+            str(photos_dir),
+            nb_image=saved_photos,
+            dir_path_obj=str(detections_dir / "OBJ_DETECT"),
+        )
+        print("\n✅ Pipeline complet terminé!")
 
 
 if __name__ == "__main__":
