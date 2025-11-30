@@ -4,7 +4,8 @@ import time
 import argparse
 from datetime import datetime
 from interface_user import get_next_video_name
-from recup_canap_V3 import analyse_image
+from detection_person import analyse_image
+from recup_canap_V3 import affichage_boxes
 
 
 def parse_args():
@@ -129,7 +130,7 @@ def main():
     start = time.time()
     last_photo = start - args.photo_interval
     saved_photos = 0
-
+    detection_results = []
     try:
         while True:
             ret, frame = cap.read()
@@ -146,16 +147,27 @@ def main():
             # Sauvegarder une photo si l'intervalle est atteint
             if now - last_photo >= args.photo_interval:
                 saved_photos += 1
-                # tsf = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
                 video_name_sans_ext = video_name.split(".")[0]
                 test = video_name_sans_ext.split("_")
                 test[1] = test[1].zfill(3)
-                video_name_sans_ext.join("_")
+                video_name_sans_ext = "_".join(test)
                 photo_name = f"{video_name_sans_ext}_{str(saved_photos).zfill(3)}.jpg"
                 photo_path = os.path.join(photos_dir, photo_name)
                 cv2.imwrite(photo_path, frame)
                 last_photo = now
-                print(f"✅ Photo sauvegardée: {photo_path} (#{saved_photos})")
+
+                # Analyser l'image
+                person_in_bed = analyse_image(photo_path)
+                status = (
+                    "Personne dans le lit ✅"
+                    if person_in_bed
+                    else "\033[91mCHUTE DÉTECTÉE ⚠️\033[0m"
+                )
+                detection_results.append((photo_name, person_in_bed))
+
+                print(
+                    f"✅ Photo sauvegardée: {photo_path} (#{saved_photos}) — {status}"
+                )
 
             # Affichage live
             cv2.imshow("Enregistrement", frame)
@@ -173,11 +185,22 @@ def main():
         if writer.isOpened():
             writer.release()
         cv2.destroyAllWindows()
-        print(f"Terminé. Vidéo: {video_path} — Photos sauvegardées: {saved_photos}")
-        print(
-            f"Terminé. Analyse des {saved_photos} photo{"s" if saved_photos > 1 else ""}"
-        )
-        analyse_image("MEDIA/IMG", saved_photos)
+        print(f"\nTerminé. Vidéo: {video_path} — Photos sauvegardées: {saved_photos}")
+        affichage_boxes(photos_dir, saved_photos)
+        # Résumé des détections
+        print("\n" + "=" * 60)
+        print("RÉSUMÉ DES DÉTECTIONS")
+        print("=" * 60)
+        chutes_detectees = 0
+        for photo, in_bed in detection_results:
+            status = "Dans le lit" if in_bed else "\033[91mCHUTE\033[0m"
+            print(f"{photo}: {status}")
+            if not in_bed:
+                chutes_detectees += 1
+
+        print("=" * 60)
+        print(f"Total: {saved_photos} photo(s) — Chutes détectées: {chutes_detectees}")
+        print("=" * 60)
 
 
 if __name__ == "__main__":

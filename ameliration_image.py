@@ -92,7 +92,7 @@ def ameliorer_image(img_path: str, afficher_img: bool = False) -> np.ndarray:
         plt.title("Égalisation histogramme")
         plt.show()
 
-    return I_corrigee
+    return I_hist
 
 
 if __name__ == "__main__":

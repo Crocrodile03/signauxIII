@@ -5,7 +5,7 @@ from ameliration_image import ameliorer_image
 import numpy as np
 
 
-def analyse_image(
+def affichage_boxes(
     dir_path_img, nb_image: int, dir_path_obj: str = "Media/IMG/OBJ_DETECT"
 ):
     # Crée le dossier "IMG" s’il n’existe pas déjà
@@ -70,4 +70,4 @@ def analyse_image(
 
 
 if __name__ == "__main__":
-    analyse_image("MEDIA/IMG", 12)
+    affichage_boxes("MEDIA/IMG", 12)
