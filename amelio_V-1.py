@@ -1,6 +1,9 @@
 import matplotlib.pyplot as plt
 import skimage as skim
 import numpy as np
+import cv2
+from skimage.filters import median
+from skimage.morphology import square
 
 # I = plt.imread('./MEDIA/IMG/video_003_008.jpg')
 
@@ -35,43 +38,55 @@ import numpy as np
 
 # plt.show()
 
-def ameliorer_image(img: np.ndarray) -> np.ndarray:
+def _show_steps(steps: dict) -> None:
+    names = list(steps.keys())
+    imgs = list(steps.values())
+    cols = 4
+    rows = int(np.ceil(len(imgs) / cols))
+    fig, axes = plt.subplots(rows, cols, figsize=(4 * cols, 3 * rows))
+    axes = np.atleast_1d(axes).ravel()
+    for ax, name, im in zip(axes, names, imgs):
+        ax.imshow(im, cmap='gray')
+        ax.set_title(name)
+        ax.axis('off')
+    for ax in axes[len(imgs):]:
+        ax.axis('off')
+    plt.tight_layout()
+    plt.show()
+
+def ameliorer_image(img: np.ndarray) -> dict[str, np.ndarray]:
     """
-    Prend une image (NumPy array), applique:
-      - conversion en niveaux de gris
-      - inversion
-      - débruitage TV
-      - inversion
-      - correction gamma (auto)
-      - égalisation d'histogramme
-    et retourne l'image corrigée (float dans [0,1]).
+    Pipeline: gray -> hist_eq -> denoise -> median1 -> median2.
+    Retourne toutes les étapes (float [0,1]) et les affiche.
     """
-    # Convertit en niveaux de gris si l'image est couleur
-    img = skim.color.rgb2gray(img)
+    # 1) Gris
+    I_gray = skim.color.rgb2gray(img)
 
-    # Pipeline simple
-    I_inv = skim.util.invert(img)
-    I_inv_corrigee = skim.restoration.denoise_tv_chambolle(I_inv)
-    I_corrigee = skim.util.invert(I_inv_corrigee)
+    # 2) Equalize histogram
+    I_hist = skim.exposure.equalize_hist(I_gray)
 
-    # Gamma automatique en fonction de la luminance moyenne (img en [0,1])
-    mean_luma = float(np.mean(I_corrigee))
-    # seuils ~110/255 et ~150/255 convertis en [0,1]
-    low_thr, high_thr = 110 / 255.0, 150 / 255.0
-    if mean_luma < low_thr:
-        gamma = float(np.interp(mean_luma, [0.16, low_thr], [0.6, 0.95]))   # éclaircir
-    elif mean_luma > high_thr:
-        gamma = float(np.interp(mean_luma, [high_thr, 0.90], [1.05, 1.6]))  # assombrir
-    else:
-        gamma = 1.0
+    # 3) Denoise (TV)
+    I_dn1 = skim.restoration.denoise_tv_chambolle(I_hist)
 
-    I_gamma = skim.exposure.adjust_gamma(I_corrigee, gamma)
-    I_hist = skim.exposure.equalize_hist(I_gamma)
+    # 4) Deux filtrages médians
+    I_med1 = median(I_dn1, square(3))
+    I_med2 = median(I_med1, square(3))
 
-    return I_hist
+    steps = {
+        "original_gray": I_gray,
+        "hist_eq": I_hist,
+        "denoise1": I_dn1,
+        "median1": I_med1,
+        "median2": I_med2,
+    }
+
+    _show_steps(steps)
+    return steps
+
+
+
 
 if __name__ == "__main__":
-    I = plt.imread('./MEDIA/IMG/video_003_008.jpg')
-    I_amelioree = ameliorer_image(I)
-    plt.imshow(I_amelioree, cmap='gray')
-    plt.show()
+    I = plt.imread("./MEDIA/IMG/video_029_004.jpg")
+    steps = ameliorer_image(I)
+    final = steps["median4"]
