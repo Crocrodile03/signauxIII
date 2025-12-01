@@ -1,5 +1,5 @@
 ultralytics==8.2.41
-numpy>=1.23,<2
+numpy<2.0.0,>=1.23.5
 opencv-python
 matplotlib
 scikit-image
