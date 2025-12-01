@@ -6,7 +6,7 @@ from pathlib import Path
 from ultralytics import YOLO
 from interface_user import get_next_video_name
 from detection_person import analyse_image, dessiner_detections, DetectionResult
-from recup_canap_V3 import affichage_boxes
+from recup_canap import affichage_boxes
 from typing import List
 
 
@@ -109,7 +109,7 @@ def main():
 
     # Initialiser YOLO une seule fois
     print("🔄 Chargement du modèle YOLO...")
-    model = YOLO("yolov8n.pt")
+    model = YOLO("runs\\detect\\falldown_detection\\weights\\best.pt")
     print("✅ Modèle chargé")
 
     # Ouvrir la caméra
