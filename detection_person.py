@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 from pathlib import Path
 from typing import List, Tuple, Dict, Optional
-from ameliration_image import ameliorer_image
+from amelioration_image import ameliorer_image
 
 
 class DetectionResult:
