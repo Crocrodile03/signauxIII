@@ -109,7 +109,7 @@ def main():
 
     # Initialiser YOLO une seule fois
     print("🔄 Chargement du modèle YOLO...")
-    model = YOLO("runs\\detect\\falldown_detection\\weights\\best.pt")
+    model = YOLO("yolov8n.pt")
     print("✅ Modèle chargé")
 
     # Ouvrir la caméra
@@ -259,14 +259,22 @@ def main():
         print(f"✅ OK: {ok} | 🚨 Chutes: {chutes} | ⚠️ Avertissements: {avertissements}")
         print(f"{'='*60}\n")
 
-        # Afficher les boxes avec détections d'objets
-        print("\n🔍 Détection et extraction des objets (lit, canapé)...")
-        affichage_boxes(
-            str(photos_dir),
-            nb_image=saved_photos,
-            dir_path_obj=str(detections_dir / "OBJ_DETECT"),
-            use_preprocessing=use_preprocessing,
-        )
+        # Afficher les images avec détections
+        print("\n🖼️ Affichage des détections...")
+        for result in detection_results:
+            detection_img_name = f"detection_{Path(result.image_path).name}"
+            detection_img_path = detections_dir / detection_img_name
+
+            if detection_img_path.exists():
+                img = cv2.imread(str(detection_img_path))
+                img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+                cv2.imshow("Detections (touche pour suivant, 'q' pour quitter)", img)
+                key = cv2.waitKey(0)  # Attendre indéfiniment
+
+                if key == ord("q"):  # Quitter si 'q'
+                    break
+        cv2.destroyAllWindows()
         print("\n✅ Pipeline complet terminé!")
 
 
