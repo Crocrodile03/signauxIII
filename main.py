@@ -109,7 +109,7 @@ def main():
 
     # Initialiser YOLO une seule fois
     print("🔄 Chargement du modèle YOLO...")
-    model = YOLO("yolov8n.pt")
+    model = YOLO("best.pt")
     print("✅ Modèle chargé")
 
     # Ouvrir la caméra
